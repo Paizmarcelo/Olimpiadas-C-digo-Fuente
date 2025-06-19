@@ -1,0 +1,903 @@
+:root {
+    --hud-bg: rgba(10, 25, 40, 0.9);
+    --hud-border: rgba(0, 255, 221, 0.6);
+    --hud-text: #E0F5FF;
+    --hud-accent: #00ddff;
+    --font-main: 'Roboto', sans-serif;
+    --font-display: 'Orbitron', sans-serif;
+}
+
+body {
+    margin: 0;
+    font-family: var(--font-main);
+    background-color: #050a10;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--hud-text);
+}
+
+/* --- VISTA MUNDIAL 3D --- */
+#world {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    perspective: 1200px; /* Aumenta la perspectiva para un efecto 3D más dramático */
+    background: #000; /* Fondo negro para el espacio si el cielo no lo cubre */
+}
+
+#cockpit-view {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    overflow: hidden;
+    /* Transformación inicial de la vista de cabina (ligeramente picado hacia abajo) */
+    transform: rotateX(5deg) translateZ(0px); 
+    transition: transform 0.1s linear; /* Transición para movimientos menores (pitch/roll) */
+}
+
+/* --- ENTORNO EXTERIOR (CIELO, TERRENO, NUBES, PISTA) --- */
+
+.sky-view {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: linear-gradient(to bottom, #1a2a45, #3a6a8a 70%, #90b8cc); /* Degradado de cielo inicial */
+    z-index: 1;
+    transform: translateZ(-500px); /* Muy lejos */
+    transition: background-image 5s ease-in-out; /* Para transiciones día/noche */
+    background-size: cover; /* Asegura que la imagen de fondo cubra el área */
+}
+
+/* NUEVO: Terreno Distante */
+.distant-terrain {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 60%; /* Ocupa la parte inferior del cielo */
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300"><path fill="%232c3e50" d="M0,250 L0,150 Q250,50 500,150 T1000,100 L1000,250 Z" opacity="0.8"/><path fill="%2334495e" d="M0,280 L0,180 Q200,80 400,200 T800,120 L1000,220 L1000,280 Z" opacity="0.7"/><path fill="%232d3e50" d="M0,300 L0,200 Q300,100 600,250 T1000,180 L1000,300 Z" opacity="0.6"/></svg>');
+    background-size: 200% 100%; /* Repite el patrón horizontalmente */
+    background-repeat: repeat-x;
+    transform: translateZ(-400px) translateY(50px); /* Detrás de nubes, ligeramente elevado */
+    z-index: 2;
+    filter: brightness(0.6); /* Oscurecer para simular distancia */
+    transition: transform 7s ease-in-out, opacity 7s ease-in-out, filter 7s ease-in-out;
+}
+
+/* Nubes, con mejor apariencia y animación */
+.clouds-layer {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-repeat: repeat-x;
+    opacity: 0; /* Inicialmente ocultas */
+    transition: opacity 1s ease-in-out;
+    transform-style: preserve-3d;
+    transform: translateZ(-200px) translateY(100%); /* Empieza abajo y lejos */
+}
+
+/* Nota: Para las imágenes de nubes, usé un placeholder. Deberías reemplazarlas por PNGs transparentes de nubes. */
+/* Ejemplo de PNGs reales: url('images/cloud1.png') */
+.clouds-far {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAACWAQMAAADbYqYcAAAABlBMVEVNTU0AAABHRvC+AAAAAXRSTlMAQObYZgAAADRJREFUeNpjYBgFo2AUjIJRMApGwSjAIWCoABKggkEICiCFAgqAIUAFlABFVQAFBgCAkQYJ2pD1lQAAAABJRU5ErkJggg=='); /* Nube tenue */
+    background-size: 60% auto;
+    z-index: 3;
+    filter: blur(1px) brightness(0.8);
+}
+
+.clouds-mid {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAACWAQMAAADbYqYcAAAABlBMVEVNTU0AAABHRvC+AAAAAXRSTlMAQObYZgAAADRJREFUeNpjYBgFo2AUjIJRMApGwSjAIWCoABKggkEICiCFAgqAIUAFlABFVQAFBgCAkQYJ2pD1lQAAAABJRU5ErkJggg=='); /* Nube más densa */
+    background-size: 50% auto;
+    z-index: 4;
+    filter: blur(0.5px) brightness(0.9);
+}
+
+.clouds-near {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAACWAQMAAADbYqYcAAAABlBMVEVNTU0AAABHRvC+AAAAAXRSTlMAQObYZgAAADRJREFUeNpjYBgFo2AUjIJRMApGwSjAIWCoABKggkEICiCFAgqAIUAFlABFVQAFBgCAkQYJ2pD1lQAAAABJRU5ErkJggg=='); /* Nube más cercana */
+    background-size: 40% auto;
+    z-index: 5;
+    filter: blur(0px) brightness(1);
+}
+
+/* LA PISTA: El elemento más crítico para la ilusión de movimiento */
+.runway-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 70%;
+    background-color: #4a4a4a;
+    transform-origin: center bottom;
+    transform: rotateX(80deg); /* Perspectiva muy pronunciada */
+    z-index: 6; /* Por encima de la mayoría de las nubes, debajo del avión */
+    overflow: hidden;
+    box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.8);
+    filter: brightness(0.7); /* Oscurecer ligeramente para realismo */
+}
+
+/* NUEVO: Efecto de calor/distorsión en la pista */
+.heat-haze {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0) 100%);
+    opacity: 0;
+    filter: blur(10px);
+    z-index: 7;
+    pointer-events: none;
+}
+
+/* Línea central animada */
+.runway-centerline {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 5px;
+    height: 200%; /* Suficiente altura para que se desplace */
+    background: repeating-linear-gradient(to bottom, yellow, yellow 20px, transparent 20px, transparent 40px);
+    background-size: 100% 40px;
+    transform: translateX(-50%);
+    opacity: 0.8;
+}
+
+/* NUEVO: Luces de pista (usando pseudo-elementos para simular repetición) */
+/* Deben estar fuera de .runway-container para que los pseudo-elementos funcionen como se espera en el contexto de la animación global */
+/* Ojo: los pseudo-elementos de un elemento son hijos lógicos, no hermanos. */
+/* Si queremos luces animadas individualmente que se desplacen, lo mejor es que sean divs reales dentro de .runway-container */
+/* Para simplificar y que funcione con la animación global de la pista, lo haremos así: */
+.runway-container::before,
+.runway-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    width: 8px; /* Ancho de la luz */
+    height: 200%; /* Para que se muevan y repitan */
+    background: repeating-linear-gradient(to bottom, 
+                #ffcc00 0px, #ffcc00 10px, /* Luz ámbar */
+                transparent 10px, transparent 100px /* Espacio entre luces */
+    );
+    background-size: 100% 100px; /* Tamaño del patrón de repetición */
+    animation: none; /* Se activará con JS */
+    opacity: 0.7;
+    filter: drop-shadow(0 0 5px #ffcc00);
+}
+
+.runway-container::before {
+    left: 20%; /* Posición de las luces izquierdas */
+    transform: translateX(-50%);
+}
+
+.runway-container::after {
+    left: 80%; /* Posición de las luces derechas */
+    transform: translateX(-50%);
+}
+
+
+/* --- ELEMENTOS DE LA CABINA (TABLERO Y MARCO) --- */
+.cockpit-dashboard {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 40%;
+    background: linear-gradient(to top, rgba(20, 20, 25, 0.95), rgba(30, 30, 40, 0.8));
+    border-top: 5px solid #333;
+    box-shadow: inset 0 5px 20px rgba(0, 0, 0, 0.5);
+    z-index: 10;
+}
+
+.cockpit-window-frame {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 20;
+    box-shadow: inset 0 0 0 10px rgba(50, 50, 60, 0.7),
+                inset 0 0 0 15px rgba(20, 20, 25, 0.6);
+    border-radius: 10px; /* Para darle un aspecto más suave */
+    filter: brightness(0.8); /* Un poco más oscuro */
+}
+
+/* --- HUD (Head-Up Display) --- */
+#hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Permite clickear a través del HUD si no hay elementos interactivos */
+    z-index: 50;
+    display: grid;
+    grid-template-areas:
+        "top-left . top-right"
+        "center-left hud-center center-right"
+        "bottom-left speedometer bottom-right";
+    grid-template-columns: 1fr auto 1fr;
+    grid-template-rows: auto 1fr auto;
+    padding: 20px;
+    box-sizing: border-box;
+    font-family: var(--font-display);
+    color: var(--hud-text);
+}
+
+/* NUEVO: Overlay de glitch para el HUD */
+.hud-glitch-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+        transparent 0,
+        transparent 2px,
+        rgba(0, 255, 221, 0.05) 2px,
+        rgba(0, 255, 221, 0.05) 3px
+    );
+    opacity: 0; /* Inicialmente oculto */
+    animation: hud-glitch 0.2s infinite alternate;
+    animation-play-state: paused; /* Se activará con JS */
+}
+
+/* NUEVO: HUD Notifications */
+#hud-notifications {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    max-width: 400px;
+    text-align: center;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.hud-notification {
+    background: rgba(0, 221, 255, 0.1);
+    border: 1px solid var(--hud-accent);
+    padding: 15px 25px;
+    margin-bottom: 10px;
+    border-radius: 10px;
+    color: var(--hud-text);
+    font-size: 1.2rem;
+    opacity: 0; /* Inicialmente oculto */
+    transform: translateY(20px);
+    animation: fadeInOutNotification 4s ease-out forwards;
+    box-shadow: 0 0 15px rgba(0, 221, 255, 0.5);
+}
+
+@keyframes fadeInOutNotification {
+    0% { opacity: 0; transform: translateY(20px); }
+    10% { opacity: 1; transform: translateY(0); }
+    90% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-20px); }
+}
+
+
+/* Asigna los elementos a las áreas de la grilla */
+.hud-top-left { grid-area: top-left; align-self: start; justify-self: start; pointer-events: auto; }
+.hud-top-right { grid-area: top-right; align-self: start; justify-self: end; pointer-events: auto; }
+.hud-bottom-left { grid-area: bottom-left; align-self: end; justify-self: start; pointer-events: auto; }
+.hud-bottom-right { grid-area: bottom-right; align-self: end; justify-self: end; pointer-events: auto; }
+.hud-center { grid-area: hud-center; align-self: center; justify-self: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.hud-speedometer { grid-area: speedometer; align-self: end; justify-self: center; margin-bottom: 20px; }
+#main-action {
+    grid-area: hud-center;
+    align-self: center;
+    justify-self: center;
+    z-index: 60;
+    pointer-events: auto;
+    position: relative;
+}
+
+
+/* --- ESTILOS DE LOS INSTRUMENTOS --- */
+
+#radar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 2px solid var(--hud-border);
+    background-color: rgba(0, 0, 0, 0.3);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 10px rgba(0, 221, 255, 0.3);
+}
+.radar-sweep {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to right, transparent 50%, var(--hud-accent) 50%);
+    transform-origin: center center;
+    animation: radar-sweep 2s linear infinite;
+    opacity: 0.7;
+    transition: opacity 0.5s ease-in-out;
+}
+@keyframes radar-sweep {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.radar-blip {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: #00ff88;
+    border-radius: 50%;
+    opacity: 0;
+    animation: blip-fade 3s linear infinite;
+}
+.blip1 { top: 20%; left: 70%; animation-delay: 0.5s; }
+.blip2 { top: 60%; left: 15%; animation-delay: 1.2s; }
+.blip3 { top: 80%; left: 40%; animation-delay: 2.0s; }
+@keyframes blip-fade {
+    0%, 100% { opacity: 0; transform: scale(0.5); }
+    20% { opacity: 1; transform: scale(1); }
+    80% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.hud-panel { /* Clase común para los paneles de información */
+    background: var(--hud-bg);
+    border: 1px solid var(--hud-border);
+    padding: 15px 20px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 0 10px rgba(0, 221, 255, 0.3);
+    color: var(--hud-text);
+    margin-bottom: 10px; /* Espacio entre ellos */
+}
+
+.sensor-title {
+    font-size: 0.8rem;
+    color: var(--hud-accent);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+#lat-value, #lon-value, #speed-value, #alt-value, #vsi-value {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    margin-bottom: 5px;
+    text-shadow: 0 0 5px var(--hud-text);
+}
+
+.g-force-bar-container {
+    width: 100%;
+    height: 10px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--hud-border);
+    border-radius: 5px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+.g-force-bar {
+    height: 100%;
+    width: 100%; /* El ancho total, luego se escala con transform */
+    background: linear-gradient(to right, #00ff88, #ffff00, #ff0000);
+    transform-origin: left center;
+    transform: scaleX(0); /* Empieza en 0 */
+    transition: transform 0.1s ease-out; /* Transición suave */
+}
+.g-force-label {
+    font-size: 0.8rem;
+    margin-top: 5px;
+    color: var(--hud-accent);
+}
+
+#attitude-indicator {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    border: 3px solid var(--hud-border);
+    background-color: rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 15px rgba(0, 221, 255, 0.5);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.attitude-horizon {
+    position: absolute;
+    width: 200%; /* Más ancho para que se mueva lateralmente con el roll */
+    height: 200%; /* Más alto para que se mueva verticalmente con el pitch */
+    background: linear-gradient(to bottom, #87CEEB 50%, #6b4c3e 50%); /* Cielo y Tierra */
+    transform-origin: center center;
+    transform: translateY(-50%) rotateZ(0deg); /* Inicio: línea en el centro */
+    transition: transform 0.1s linear; /* Para la actualización suave desde JS */
+}
+.attitude-center-mark {
+    position: absolute;
+    width: 60px;
+    height: 2px;
+    background-color: var(--hud-accent);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--hud-accent);
+}
+.attitude-center-mark::before, .attitude-center-mark::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 2px;
+    background-color: var(--hud-accent);
+    top: -10px;
+    transform: rotate(45deg);
+}
+.attitude-center-mark::before { left: -25px; transform-origin: right center; }
+.attitude-center-mark::after { right: -25px; transform-origin: left center; transform: rotate(-45deg); }
+
+
+#speedometer {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 3px solid var(--hud-border);
+    background-color: rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 15px rgba(0, 221, 255, 0.5);
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.speedometer-dial {
+    position: absolute;
+    width: 90%;
+    height: 90%;
+    border-radius: 50%;
+    background: conic-gradient(
+        transparent 0deg, transparent 225deg, /* Sección inactiva */
+        rgba(0, 255, 221, 0.2) 225deg, rgba(0, 255, 221, 0.5) 360deg /* Sección activa */
+    );
+    transform: rotate(-135deg); /* Inicio del dial en 0 KNOTS (correspondiente a -135deg de la aguja) */
+}
+.speedometer-needle {
+    position: absolute;
+    width: 2px;
+    height: 40%;
+    background-color: var(--hud-accent);
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(-135deg); /* Inicia en 0 KNOTS */
+    transition: transform 0.1s linear;
+    z-index: 2;
+    box-shadow: 0 0 8px var(--hud-accent);
+}
+.speedometer-center {
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    background-color: var(--hud-accent);
+    border-radius: 50%;
+    z-index: 3;
+}
+.speed-mark {
+    position: absolute;
+    color: var(--hud-text);
+    font-size: 0.8rem;
+    transform: translate(-50%, -50%); /* Ajuste para centrar el texto */
+}
+.mark-0 { top: 80%; left: 15%; }
+.mark-50 { top: 45%; left: 5%; }
+.mark-100 { top: 15%; left: 20%; }
+.mark-150 { top: 5%; left: 50%; }
+.mark-200 { top: 15%; left: 80%; }
+.mark-250 { top: 45%; left: 95%; }
+.mark-300 { top: 80%; left: 85%; }
+
+
+/* NUEVO: Heading Indicator (Brújula) */
+#heading-indicator {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 3px solid var(--hud-border);
+    background-color: rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 15px rgba(0, 221, 255, 0.5);
+    position: relative;
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.heading-dial {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background-image: conic-gradient(
+        #333 0deg, #333 1deg, /* N */
+        transparent 1deg, transparent 44deg,
+        #333 45deg, #333 46deg, /* NE */
+        transparent 46deg, transparent 89deg,
+        #333 90deg, #333 91deg, /* E */
+        transparent 91deg, transparent 134deg,
+        #333 135deg, #333 136deg, /* SE */
+        transparent 136deg, transparent 179deg,
+        #333 180deg, #333 181deg, /* S */
+        transparent 181deg, transparent 224deg,
+        #333 225deg, #333 226deg, /* SW */
+        transparent 226deg, transparent 269deg,
+        #333 270deg, #333 271deg, /* W */
+        transparent 271deg, transparent 314deg,
+        #333 315deg, #333 316deg, /* NW */
+        transparent 316deg, transparent 359deg,
+        #333 360deg /* Cierre */
+    );
+    transform: rotate(0deg); /* Se animará */
+    transition: transform 0.1s linear;
+}
+.heading-label {
+    position: absolute;
+    font-size: 1.1rem;
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+}
+.heading-label.north { top: 10px; left: 50%; transform: translateX(-50%); color: red; }
+.heading-label.east { top: 50%; right: 10px; transform: translateY(-50%); }
+.heading-label.south { bottom: 10px; left: 50%; transform: translateX(-50%); }
+.heading-label.west { top: 50%; left: 10px; transform: translateY(-50%); }
+
+
+.heading-needle {
+    position: absolute;
+    width: 2px;
+    height: 45%;
+    background-color: var(--hud-accent);
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(0deg); /* Siempre apunta hacia arriba (norte) */
+    z-index: 5;
+    box-shadow: 0 0 8px var(--hud-accent);
+}
+.heading-needle::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 12px solid var(--hud-accent);
+}
+
+.heading-center-mark {
+    position: absolute;
+    background-color: #fff;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.9rem;
+    color: #000;
+    font-weight: bold;
+}
+
+
+/* --- ESTILOS DE BOTONES --- */
+#login-btn, #register-btn {
+    padding: 12px 25px;
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: bold;
+    border: 2px solid var(--hud-accent);
+    border-radius: 8px;
+    background-color: rgba(0, 221, 255, 0.1);
+    color: #fff;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
+}
+#login-btn:hover, #register-btn:hover {
+    background-color: rgba(0, 221, 255, 0.3);
+    box-shadow: 0 0 15px var(--hud-accent);
+}
+#register-btn {
+    padding: 10px 20px;
+    font-size: 1rem;
+}
+
+/* --- ANIMACIONES DE DESPEGUE (Duración total de 15 segundos para mayor drama) --- */
+/* Aumentamos la duración para acomodar más fases y transiciones suaves */
+.takeoff-active #cockpit-view {
+    animation: cockpit-takeoff-motion 15s ease-in-out forwards;
+}
+
+@keyframes cockpit-takeoff-motion {
+    0% { transform: rotateX(5deg) translateZ(0px); } /* Inicio en pista, ligeramente picado */
+    10% { transform: rotateX(4deg) translateZ(-50px); } /* Taxi, ligero avance */
+    30% { transform: rotateX(2deg) translateZ(-150px); } /* Acelerando en pista, más zoom */
+    50% { transform: rotateX(-5deg) translateZ(-250px); } /* Rotación y despegue, morro arriba */
+    70% { transform: rotateX(-8deg) translateZ(-400px); } /* Ascenso, zoom y cabeceo pronunciado */
+    100% { transform: rotateX(-6deg) translateZ(-500px); } /* Estabilizado en ascenso/crucero, zoom final */
+}
+
+/* Animación de la pista: La línea central se mueve hacia atrás, más rápido al principio */
+.takeoff-active .runway-centerline {
+    animation: centerline-move 15s linear forwards;
+}
+@keyframes centerline-move {
+    0% { background-position-y: 0%; }
+    100% { background-position-y: 1000%; } /* Mucho más scroll para simular alta velocidad */
+}
+
+/* Animación de las luces de pista (ahora con los pseudo-elementos del runway-container) */
+.takeoff-active .runway-container::before,
+.takeoff-active .runway-container::after {
+    animation: runway-lights-move 15s linear forwards;
+}
+@keyframes runway-lights-move {
+    0% { background-position-y: 0%; }
+    100% { background-position-y: 1000%; } /* Misma velocidad que la línea central */
+}
+
+/* Animación de calor/distorsión */
+.takeoff-active .heat-haze {
+    animation: heat-haze-effect 15s ease-out forwards;
+}
+@keyframes heat-haze-effect {
+    0% { opacity: 0; filter: blur(10px) saturate(0.5); }
+    30% { opacity: 0.7; filter: blur(2px) saturate(1.5); } /* Máximo efecto al acelerar */
+    70% { opacity: 0.3; filter: blur(5px) saturate(1); } /* Disminuye al ascender */
+    100% { opacity: 0; filter: blur(10px) saturate(0.5); }
+}
+
+/* Animación del terreno distante */
+.takeoff-active .distant-terrain {
+    animation: terrain-move 15s linear forwards;
+}
+@keyframes terrain-move {
+    0% { transform: translateZ(-400px) translateY(50px); opacity: 0.8; }
+    50% { transform: translateZ(-100px) translateY(-50px); opacity: 0.6; } /* Se acerca y luego se aleja y difumina */
+    100% { transform: translateZ(200px) translateY(-200px); opacity: 0; filter: blur(20px) brightness(0); } /* Desaparece en la distancia */
+}
+
+
+/* Animación de scroll de nubes (diferentes velocidades para profundidad) */
+.takeoff-active .clouds-layer {
+    opacity: 1; /* Asegurarse de que las nubes sean visibles */
+    animation: clouds-pass 15s linear forwards;
+}
+@keyframes clouds-pass {
+    0% { transform: translateZ(-200px) translateY(100%); opacity: 0.2; }
+    30% { transform: translateZ(-150px) translateY(70%); opacity: 0.5; }
+    60% { transform: translateZ(-50px) translateY(30%); opacity: 0.8; }
+    90% { transform: translateZ(50px) translateY(0%); opacity: 1; }
+    100% { transform: translateZ(100px) translateY(-50%); opacity: 0; }
+}
+/* Diferenciar velocidades de nubes */
+.takeoff-active .clouds-far { animation-duration: 20s; }
+.takeoff-active .clouds-mid { animation-duration: 15s; }
+.takeoff-active .clouds-near { animation-duration: 10s; }
+
+
+/* Animación del horizonte artificial */
+.takeoff-active .attitude-horizon {
+    animation: attitude-takeoff 15s ease-out forwards;
+}
+@keyframes attitude-takeoff {
+    0% { transform: translateY(-50%) rotateZ(0deg); }
+    30% { transform: translateY(-48%) rotateZ(1deg); } /* Pequeños ajustes durante taxi/aceleración */
+    50% { transform: translateY(-30%) rotateZ(-5deg); } /* Rotación/Pitch Up */
+    70% { transform: translateY(-20%) rotateZ(2deg); } /* Subida inicial */
+    100% { transform: translateY(-25%) rotateZ(0deg); } /* Estabilización en ascenso */
+}
+
+/* Animación del velocímetro */
+/* Nota: La aguja del velocímetro se controla principalmente con JS para la simulación precisa.
+   Esta animación CSS es una base, pero JS la sobrescribirá con `transform`. */
+.takeoff-active .speedometer-needle {
+    /* animation: speedometer-acceleration 15s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; */
+}
+@keyframes speedometer-acceleration {
+    0% { transform: translateX(-50%) rotate(-135deg); } /* 0 KNOTS */
+    10% { transform: translateX(-50%) rotate(-120deg); } /* Taxi */
+    40% { transform: translateX(-50%) rotate(0deg); } /* Aceleración rápida a 200 KNOTS */
+    70% { transform: translateX(-50%) rotate(90deg); } /* 300 KNOTS */
+    100% { transform: translateX(-50%) rotate(90deg); } /* Mantiene velocidad de crucero */
+}
+
+/* Animación de la barra G-Force */
+.takeoff-active .g-force-bar {
+    animation: g-force-takeoff 15s ease-out forwards;
+}
+@keyframes g-force-takeoff {
+    0% { transform: scaleX(0); }
+    10% { transform: scaleX(0.1); }
+    40% { transform: scaleX(0.9); } /* Pico de fuerza G en el despegue */
+    60% { transform: scaleX(0.4); }
+    100% { transform: scaleX(0.2); }
+}
+
+/* NUEVO: Animación del HUD Glitch */
+@keyframes hud-glitch {
+    0%, 100% { opacity: 0; }
+    5% { opacity: 0.1; }
+    10% { opacity: 0.05; }
+    15% { opacity: 0.15; }
+    20% { opacity: 0; }
+}
+
+/* Animación del Heading Indicator (Brújula) - Asumimos un cambio de rumbo en el aire */
+/* Nota: El rumbo se controlará con JS para la simulación precisa. */
+.takeoff-active #heading-indicator .heading-dial {
+    /* animation: heading-change 15s linear forwards; */
+}
+@keyframes heading-change {
+    0% { transform: rotate(0deg); } /* Norte */
+    50% { transform: rotate(-90deg); } /* Gira a Este */
+    100% { transform: rotate(-45deg); } /* Se estabiliza en Nordeste */
+}
+
+
+/* --- ESTILOS DEL OVERLAY DE LOGIN --- */
+#login-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: linear-gradient(135deg, rgba(5, 10, 16, 0.95), rgba(10, 25, 40, 0.98));
+    backdrop-filter: blur(20px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease-out, visibility 0s linear 0.5s;
+}
+
+#login-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.5s ease-out;
+}
+
+.login-container {
+    background: var(--hud-bg);
+    border: 2px solid var(--hud-border);
+    border-radius: 16px;
+    padding: 40px;
+    width: 90%;
+    max-width: 450px;
+    box-shadow: 0 0 40px rgba(0, 221, 255, 0.4);
+    transform: translateY(50px);
+    opacity: 0;
+    animation: slideInLogin 1s ease-out forwards;
+}
+
+@keyframes slideInLogin {
+    from { transform: translateY(50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.login-header h1 {
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    color: var(--hud-accent);
+    margin: 0;
+    text-shadow: 0 0 15px var(--hud-accent);
+}
+
+.login-header p {
+    color: var(--hud-text);
+    margin: 10px 0 0 0;
+    opacity: 0.8;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    color: var(--hud-text);
+    margin-bottom: 8px;
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(0, 221, 255, 0.3);
+    border-radius: 8px;
+    color: var(--hud-text);
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--hud-accent);
+    box-shadow: 0 0 15px rgba(0, 221, 255, 0.3);
+}
+
+.login-submit {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, rgba(0, 221, 255, 0.2), rgba(0, 221, 255, 0.4));
+    border: 2px solid var(--hud-accent);
+    border-radius: 8px;
+    color: white;
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 20px;
+}
+
+.login-submit:hover {
+    background: linear-gradient(135deg, rgba(0, 221, 255, 0.4), rgba(0, 221, 255, 0.6));
+    box-shadow: 0 0 25px rgba(0, 221, 255, 0.5);
+    transform: translateY(-2px);
+}
+
+.login-options {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 30px;
+}
+
+.login-options a {
+    color: var(--hud-accent);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.login-options a:hover {
+    text-shadow: 0 0 8px var(--hud-accent);
+}
+
+.flight-status {
+    border-top: 1px solid rgba(0, 221, 255, 0.3);
+    padding-top: 20px;
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+}
+
+.status-label {
+    color: var(--hud-text);
+    opacity: 0.8;
+}
+
+.status-value {
+    color: var(--hud-accent);
+    font-family: var(--font-display);
+}
+
+.status-success {
+    color: #00ff88;
+    text-shadow: 0 0 8px #00ff88;
+}
